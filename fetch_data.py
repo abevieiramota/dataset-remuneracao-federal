@@ -2,8 +2,8 @@ from urllib import request
 import itertools
 import logging
 
-ANOS = range(2013, 2018)
-MESES = range(1, 13)
+ANOS = range(2017, 2018)
+MESES = range(1, 4)
 logger = logging.getLogger("FetchingRemuneracaoFederal")
 
 URL = "http://arquivos.portaldatransparencia.gov.br/downloads.asp?a={}&m={:02d}&d=C&consulta=Servidores"

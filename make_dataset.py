@@ -6,11 +6,13 @@ import pandas as pd
 import zipfile
 import re
 from sklearn.preprocessing import LabelEncoder
+import types
+
 
 def STRIP(text):
 
     try:
-        return text.strip()
+        return text.strip().replace(u"\x00", '')
     except AttributeError:
         return text
 
@@ -19,7 +21,7 @@ class RemuneracaoFederalExtractor:
     CAD_COLUMNS = ['Id_SERVIDOR_PORTAL', 'NOME', 'DESCRICAO_CARGO',
                    'CLASSE_CARGO', 'REFERENCIA_CARGO', 'PADRAO_CARGO', 'NIVEL_CARGO',
                    'NIVEL_FUNCAO', 'FUNCAO',
-                   'ATIVIDADE', 'OPCAO_FUNCAO_TOTAL', 'UORG_LOTACAO',
+                   'ATIVIDADE', 'UORG_LOTACAO',
                    'ORG_LOTACAO', 'ORGSUP_LOTACAO', 'UORG_EXERCICIO',
                    'ORG_EXERCICIO',
                    'ORGSUP_EXERCICIO', 'TIPO_VINCULO', 'SITUACAO_VINCULO',
@@ -32,10 +34,12 @@ class RemuneracaoFederalExtractor:
         "sep": "\t",
         "encoding": "iso-8859-1", 
         "decimal": ",",
-        "usecols": CAD_COLUMNS,
+        #"usecols": CAD_COLUMNS,
         "iterator": True,
         "chunksize": 10000,
-        "converters": {column_name:STRIP for column_name in CAD_COLUMNS}
+        #"converters": {column_name:STRIP for column_name in CAD_COLUMNS},
+        # workround > n conseguindo ler as colunas por conta do \x000
+        "header": None
     }
 
     CAD_CAT_COLS = ['NOME',
@@ -106,11 +110,6 @@ class RemuneracaoFederalExtractor:
         self.encoders = {}
 
 
-    def filter_in(self, df):
-
-        return df[self.cad_include_filter(df)]
-
-
     def ler_zip_csv(self, filepath):
 
         self.logger.info('>Processando arquivo {}'.format(filepath))
@@ -118,13 +117,23 @@ class RemuneracaoFederalExtractor:
         with zipfile.ZipFile(filepath, 'r') as zip_ref:
             
             files_in_zip = {filename.split("_")[1]:filename for filename in zip_ref.namelist()}
-                
-            with zip_ref.open(files_in_zip['Cadastro.csv']) as zip_file:
-        
-                #http://stackoverflow.com/questions/13651117/pandas-filter-lines-on-load-in-read-csv
-                iter_csv = pd.read_csv(zip_file, **RemuneracaoFederalExtractor.CAD_READ_CFG)
 
-                cad_df = pd.concat([self.filter_in(chunk) for chunk in iter_csv])
+            with zip_ref.open(files_in_zip['Cadastro.csv']) as zip_file:
+
+                first_line = str(zip_file.readline())
+
+                columns = [column.replace(u"\x00", "") for column in first_line.replace(r"\n", "")\
+                                                                               .replace(r"\r", "")\
+                                                                               .replace(r"b'", "").split(r"\t")]
+
+                converters = {i:STRIP for i in range(len(columns))}
+
+                iter_csv = pd.read_csv(zip_file, converters=converters, **RemuneracaoFederalExtractor.CAD_READ_CFG)
+
+                cad_df = pd.concat(list(iter_csv))
+                cad_df.columns = columns
+                cad_df = cad_df[RemuneracaoFederalExtractor.CAD_COLUMNS]
+                cad_df = cad_df[self.cad_include_filter(cad_df)]
 
             with zip_ref.open(files_in_zip['Remuneracao.csv']) as zip_file:
         
