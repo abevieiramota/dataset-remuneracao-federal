@@ -31,7 +31,7 @@ class RemuneracaoFederalExtractor:
                    'DATA_DIPLOMA_INGRESSO_SERVICOPUBLICO']
 
     CAD_READ_CFG = {
-        "sep": "\t",
+        "sep": ";",
         "encoding": "iso-8859-1", 
         "decimal": ",",
         #"usecols": CAD_COLUMNS,
@@ -56,7 +56,7 @@ class RemuneracaoFederalExtractor:
 
     CAD_CAT_ID_COLS = [colname + "-ID" for colname in CAD_CAT_COLS]
 
-    REM_COLUMNS = ['ANO', 'MES', 'ID_SERVIDOR_PORTAL',
+    REM_COLUMNS = ['ANO', 'MES', 'Id_SERVIDOR_PORTAL', 'CPF', 'NOME',
        'REMUNERAÇÃO BÁSICA BRUTA (R$)', 'REMUNERAÇÃO BÁSICA BRUTA (U$)',
        'ABATE-TETO (R$)', 'ABATE-TETO (U$)', 'GRATIFICAÇÃO NATALINA (R$)',
        'GRATIFICAÇÃO NATALINA (U$)',
@@ -77,20 +77,19 @@ class RemuneracaoFederalExtractor:
        'TOTAL DE VERBAS INDENIZATÓRIAS (U$)(*)']
 
     REM_READ_CFG = {
-        "sep": "\t",
+        "sep": ";",
         "encoding": "iso-8859-1", 
         "decimal": ",",
-        "usecols": REM_COLUMNS,
         "converters": {column_name:STRIP for column_name in REM_COLUMNS}
     }
 
-    OBS_COLUMNS = ['ID_SERVIDOR_PORTAL', 'OBSERVACAO']
+    OBS_COLUMNS = ['Id_SERVIDOR_PORTAL', 'OBSERVACAO']
 
     OBS_READ_CFG = {
-        "sep": "\t",
+        "sep": ";",
         "encoding": "iso-8859-1", 
         "decimal": ",",
-        "usecols": OBS_COLUMNS,
+        "names": OBS_COLUMNS,
         "converters": {column_name:STRIP for column_name in OBS_COLUMNS}
     }
 
@@ -112,19 +111,21 @@ class RemuneracaoFederalExtractor:
 
     def ler_zip_csv(self, filepath):
 
-        self.logger.info('>Processando arquivo {}'.format(filepath))
+        self.logger.info('>Processando arquivo %s', filepath)
         
         with zipfile.ZipFile(filepath, 'r') as zip_ref:
             
             files_in_zip = {filename.split("_")[1]:filename for filename in zip_ref.namelist()}
+            filename = files_in_zip['Cadastro.csv']
 
-            with zip_ref.open(files_in_zip['Cadastro.csv']) as zip_file:
+            with zip_ref.open(filename) as zip_file:
 
                 first_line = str(zip_file.readline())
 
                 columns = [column.replace(u"\x00", "") for column in first_line.replace(r"\n", "")\
                                                                                .replace(r"\r", "")\
-                                                                               .replace(r"b'", "").split(r"\t")]
+                                                                               .replace(r"b'", "")\
+                                                                               .replace(r'"', "").split(r";")]
 
                 converters = {i:STRIP for i in range(len(columns))}
 
@@ -134,17 +135,25 @@ class RemuneracaoFederalExtractor:
                 cad_df.columns = columns
                 cad_df = cad_df[RemuneracaoFederalExtractor.CAD_COLUMNS]
                 cad_df = cad_df[self.cad_include_filter(cad_df)]
+                self.logger.info("Extraídas e filtradas %d linhas do %s", cad_df.shape[0], filename)
 
-            with zip_ref.open(files_in_zip['Remuneracao.csv']) as zip_file:
-        
+            filename = files_in_zip['Remuneracao.csv']
+            with zip_ref.open(filename) as zip_file:
+
                 rem_df = pd.read_csv(zip_file, **RemuneracaoFederalExtractor.REM_READ_CFG)
+                rem_df.drop(columns=['NOME'], inplace=True)
+                self.logger.info("Extraídas %d linhas do %s", rem_df.shape[0], filename)
 
-            with zip_ref.open(files_in_zip['Observacoes.csv']) as zip_file:
+            filename = files_in_zip['Observacoes.csv']
+            with zip_ref.open(filename) as zip_file:
         
                 obs_df = pd.read_csv(zip_file, **RemuneracaoFederalExtractor.OBS_READ_CFG)
+                self.logger.info("Extraídas %d linhas do %s", rem_df.shape[0], filename)
 
-            df = pd.merge(cad_df, rem_df, left_on="Id_SERVIDOR_PORTAL", right_on="ID_SERVIDOR_PORTAL")
-            df = pd.merge(df, obs_df, left_on="ID_SERVIDOR_PORTAL", right_on="ID_SERVIDOR_PORTAL", how="left")
+            df = pd.merge(cad_df, rem_df, left_on="Id_SERVIDOR_PORTAL", right_on="Id_SERVIDOR_PORTAL")
+            self.logger.info("%d linhas do merge de Cadastro e Remuneração", df.shape[0])
+            df = pd.merge(df, obs_df, left_on="Id_SERVIDOR_PORTAL", right_on="Id_SERVIDOR_PORTAL", how="left")
+            self.logger.info("%d linhas do merge de Cadastro e Remuneração E Observacoes", df.shape[0])
 
         return df
 
@@ -161,7 +170,7 @@ class RemuneracaoFederalExtractor:
 
         for (colname, id_colname) in zip(RemuneracaoFederalExtractor.CAD_CAT_COLS, RemuneracaoFederalExtractor.CAD_CAT_ID_COLS):
 
-            self.logger.info(">Normalizando coluna {}".format(colname))
+            self.logger.info(">Normalizando coluna %s", colname)
 
             encoder = LabelEncoder().fit(self.df[colname].unique())
         
@@ -173,7 +182,7 @@ class RemuneracaoFederalExtractor:
 
         for (colname, id_colname) in zip(RemuneracaoFederalExtractor.OBS_CAT_COLS, RemuneracaoFederalExtractor.OBS_CAT_ID_COLS):
 
-            self.logger.info(">Normalizando coluna {}".format(colname))
+            self.logger.info(">Normalizando coluna %s", colname)
 
             encoder = LabelEncoder().fit(self.df[colname].unique())
         

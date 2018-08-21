@@ -2,11 +2,12 @@ from urllib import request
 import itertools
 import logging
 
-ANOS = range(2017, 2018)
-MESES = range(1, 4)
+meses_2017 = itertools.product([2017], range(1, 13))
+meses_2018 = itertools.product([2018], range(1, 7))
+
 logger = logging.getLogger("FetchingRemuneracaoFederal")
 
-URL = "http://arquivos.portaldatransparencia.gov.br/downloads.asp?a={}&m={:02d}&d=C&consulta=Servidores"
+URL = "http://portaldatransparencia.gov.br/download-de-dados/servidores/{}{:02d}_Servidores"
 FILENAME = "remuneracao_federal_civil_{:02d}_{}.zip"
 
 if __name__ == '__main__':
@@ -16,11 +17,11 @@ if __name__ == '__main__':
 
     logger.info("BAIXANDO ARQUIVOS DE REMUNERAÇÃO DE SERVIDORES CIVIS FEDERAIS")
     
-    for (ano, mes) in itertools.product(ANOS, MESES):
-
-        logger.info(">Baixando arquivo de {:02d}/{}".format(mes, ano))
+    for (ano, mes) in itertools.chain(meses_2017, meses_2018):
 
         url = URL.format(ano, mes)
+        logger.info(">Baixando arquivo de %d/%d\nURL: %s", mes, ano, url)
+
         filename = FILENAME.format(mes, ano)
 
         request.urlretrieve(url, filename)
